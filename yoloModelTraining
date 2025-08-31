@@ -1,0 +1,267 @@
+def install_requirements():
+    """Install required packages optimized for Intel Mac"""
+    packages = [
+        "torch",  # CPU version for Intel Mac
+        "torchvision", 
+        "ultralytics==8.0.196",
+        "roboflow",
+        "matplotlib",
+        "pillow",
+        "opencv-python",
+        "pyyaml",
+        "scipy",
+        "pandas",
+        "seaborn",
+        "psutil"  # For system monitoring
+    ]
+    
+    for package in packages:
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f"✓ Installed {package}")
+        except subprocess.CalledProcessError:
+            print(f"✗ Failed to install {package}")#!/usr/bin/env python3
+"""
+YOLOv8 Custom Object Detection Training Script
+Converted from Google Colab for local VS Code environment
+"""
+
+import os
+import sys
+import subprocess
+import glob
+from pathlib import Path
+
+def install_requirements():
+    """Install required packages"""
+    packages = [
+        "ultralytics==8.0.196",
+        "torch==2.2.2",
+        "torchvision",
+        "roboflow",
+        "matplotlib",
+        "pillow",
+        "opencv-python",
+        "pyyaml",
+        "scipy",
+        "pandas",
+        "seaborn"
+    ]
+    
+    for package in packages:
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f"✓ Installed {package}")
+        except subprocess.CalledProcessError:
+            print(f"✗ Failed to install {package}")
+
+def check_gpu():
+    """Check system capabilities for Intel Mac"""
+    try:
+        import torch
+        import psutil
+        
+        print(f"✓ Intel Mac detected with {psutil.virtual_memory().total // (1024**3)}GB RAM")
+        print(f"✓ CPU cores: {psutil.cpu_count()}")
+        
+        # Intel Macs don't have MPS, will use CPU
+        print("ℹ Intel Mac will use CPU training (no GPU acceleration)")
+        print("  With 32GB RAM, you can use larger batch sizes for efficiency")
+        
+        return False  # No GPU acceleration, but that's expected
+    except ImportError:
+        print("✗ Required libraries not installed")
+        return False
+
+def setup_directories():
+    """Create necessary directories"""
+    home = os.getcwd()
+    datasets_path = os.path.join(home, "datasets")
+    os.makedirs(datasets_path, exist_ok=True)
+    print(f"✓ Created datasets directory at {datasets_path}")
+    return home, datasets_path
+
+def download_dataset(api_key, workspace, project_name, version_num=1):
+    """Download dataset from Roboflow"""
+    try:
+        from roboflow import Roboflow
+        
+        rf = Roboflow(api_key=api_key)
+        project = rf.workspace(workspace).project(project_name)
+        version = project.version(version_num)
+        dataset = version.download("yolov8")
+        print(f"✓ Dataset downloaded to: {dataset.location}")
+        return dataset
+    except Exception as e:
+        print(f"✗ Failed to download dataset: {e}")
+        return None
+
+def train_model(dataset_path, epochs=100, batch_size=32, img_size=640):
+    """Train YOLOv8 model optimized for Intel Mac"""
+    try:
+        from ultralytics import YOLO
+        import torch
+        
+        # Set CPU threads for better performance on Intel Mac
+        torch.set_num_threads(8)  # Adjust based on your CPU cores
+        
+        # Initialize model
+        model = YOLO('yolov8s.pt')
+        
+        print(f"🔧 Training with batch_size={batch_size} (optimized for 32GB RAM)")
+        print(f"🔧 Using {torch.get_num_threads()} CPU threads")
+        
+        # Train the model with Intel Mac optimizations
+        results = model.train(
+            data=f"{dataset_path}/data.yaml",
+            epochs=epochs,
+            batch=batch_size,  # Larger batch size for better RAM utilization
+            imgsz=img_size,
+            plots=True,
+            project="runs/detect",
+            name="train",
+            workers=4,  # Reduce workers to prevent memory issues
+            patience=50,  # Early stopping patience
+            device='cpu'  # Explicitly use CPU
+        )
+        
+        print("✓ Training completed!")
+        return results
+        
+    except Exception as e:
+        print(f"✗ Training failed: {e}")
+        print("💡 Try reducing batch_size if you encounter memory issues")
+        return None
+
+def validate_model(model_path, dataset_path):
+    """Validate the trained model"""
+    try:
+        from ultralytics import YOLO
+        
+        model = YOLO(model_path)
+        results = model.val(data=f"{dataset_path}/data.yaml")
+        print("✓ Validation completed!")
+        return results
+        
+    except Exception as e:
+        print(f"✗ Validation failed: {e}")
+        return None
+
+def run_inference(model_path, source_path, conf_threshold=0.25):
+    """Run inference on test images"""
+    try:
+        from ultralytics import YOLO
+        
+        model = YOLO(model_path)
+        results = model.predict(
+            source=source_path,
+            conf=conf_threshold,
+            save=True,
+            project="runs/detect",
+            name="predict"
+        )
+        print("✓ Inference completed!")
+        return results
+        
+    except Exception as e:
+        print(f"✗ Inference failed: {e}")
+        return None
+
+def export_to_onnx(model_path):
+    """Export trained model to ONNX format"""
+    try:
+        from ultralytics import YOLO
+        
+        model = YOLO(model_path)
+        model.export(format='onnx')
+        print("✓ Model exported to ONNX format!")
+        
+    except Exception as e:
+        print(f"✗ ONNX export failed: {e}")
+
+def display_results():
+    """Display prediction results"""
+    try:
+        # Find the most recent prediction folder
+        predict_folders = glob.glob('runs/detect/predict*')
+        if predict_folders:
+            latest_folder = max(predict_folders, key=os.path.getctime)
+            image_files = glob.glob(f"{latest_folder}/*.jpg") + glob.glob(f"{latest_folder}/*.png")
+            
+            print(f"✓ Results saved in: {latest_folder}")
+            print(f"✓ Found {len(image_files)} result images")
+            
+            # Display first 3 images (if running in Jupyter)
+            for i, img_path in enumerate(image_files[:3]):
+                print(f"Result {i+1}: {img_path}")
+                
+        else:
+            print("⚠ No prediction results found")
+            
+    except Exception as e:
+        print(f"✗ Error displaying results: {e}")
+
+def main():
+    """Main training pipeline"""
+    print("🚀 Starting YOLOv8 Custom Training Pipeline")
+    print("=" * 50)
+    
+    # Step 1: Install requirements
+    print("\n1. Installing requirements...")
+    install_requirements()
+    
+    # Step 2: Check GPU
+    print("\n2. Checking GPU availability...")
+    gpu_available = check_gpu()
+    
+    # Step 3: Setup directories
+    print("\n3. Setting up directories...")
+    home, datasets_path = setup_directories()
+    
+    # Step 4: Download dataset (Replace with your Roboflow details)
+    print("\n4. Downloading dataset...")
+    # TODO: Replace these with your actual Roboflow credentials
+    API_KEY = "YOUR_ROBOFLOW_API_KEY"
+    WORKSPACE = "YOUR_WORKSPACE_NAME" 
+    PROJECT = "YOUR_PROJECT_NAME"
+    
+    if API_KEY == "YOUR_ROBOFLOW_API_KEY":
+        print("⚠ Please update the Roboflow credentials in the script")
+        print("   - Get your API key from: https://roboflow.com/")
+        return
+    
+    dataset = download_dataset(API_KEY, WORKSPACE, PROJECT)
+    if not dataset:
+        return
+    
+    # Step 5: Train model
+    print("\n5. Training model...")
+    os.chdir(datasets_path)
+    train_results = train_model(dataset.location, epochs=100, batch_size=16)
+    if not train_results:
+        return
+    
+    # Step 6: Validate model
+    print("\n6. Validating model...")
+    best_model_path = "runs/detect/train/weights/best.pt"
+    validate_model(best_model_path, dataset.location)
+    
+    # Step 7: Run inference
+    print("\n7. Running inference...")
+    test_images_path = f"{dataset.location}/test/images"
+    run_inference(best_model_path, test_images_path)
+    
+    # Step 8: Export to ONNX
+    print("\n8. Exporting to ONNX...")
+    export_to_onnx(best_model_path)
+    
+    # Step 9: Display results
+    print("\n9. Results summary...")
+    display_results()
+    
+    print("\n✅ Training pipeline completed!")
+    print(f"📁 Best model saved at: {best_model_path}")
+    print(f"📁 ONNX model saved at: runs/detect/train/weights/best.onnx")
+
+if __name__ == "__main__":
+    main()
