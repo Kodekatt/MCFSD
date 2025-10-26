@@ -1,0 +1,24 @@
+services:
+  fsd-simulation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fsd-car-simulation
+    ports:
+      - "4567:4567"
+    volumes:
+      # Mount training data
+      - ./myData:/app/myData:ro
+      # Mount project directory for model.h5
+      - .:/app/workspace:rw
+      # Persistent storage for generated files
+      - fsd-data:/app/data
+    environment:
+      - FLASK_ENV=development
+      - TF_CPP_MIN_LOG_LEVEL=3
+    restart: unless-stopped
+    # Uncomment below to run training instead
+    # command: python trainingSimulation.py
+
+volumes:
+  fsd-data:
