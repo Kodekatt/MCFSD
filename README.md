@@ -37,8 +37,8 @@ A Flask-based autonomous driving simulation using TensorFlow/Keras for behaviora
 
 2. **Clone and Build**
    ```bash
-   git clone <repository-url>
-   cd documentation
+   git clone https://github.com/Kodekatt/MCFSD.git
+   cd MCFSD
    docker-compose build
    ```
 
